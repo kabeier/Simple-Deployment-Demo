@@ -88,6 +88,17 @@ DATABASES = {
 }
 
 
+SESSION_COOKIE_SECURE   = os.environ.get('SESSION_COOKIE_SECURE', 'False') == 'True'
+SESSION_COOKIE_HTTPONLY = os.environ.get('SESSION_COOKIE_HTTPONLY', 'True') == 'True'
+CSRF_COOKIE_SECURE      = os.environ.get('CSRF_COOKIE_SECURE', 'False') == 'True'
+
+# Our auth cookie
+AUTH_COOKIE_SECURE   = os.environ.get('AUTH_COOKIE_SECURE', 'False') == 'True'
+AUTH_COOKIE_SAMESITE = os.environ.get('AUTH_COOKIE_SAMESITE', 'Lax')
+
+# nginx terminates TLS; this tells Django the original request was HTTPS
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
