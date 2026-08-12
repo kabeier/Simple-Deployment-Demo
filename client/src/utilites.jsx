@@ -68,7 +68,7 @@ export const redirectIfLoggedIn = async ()=>{
     return email ? redirect("/home") : null;
 }
 
-export const homeLoader = ()=>{
+export const homeLoader = async ()=>{
     await requireLogin()
     return getTasks()
 }
