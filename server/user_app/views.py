@@ -22,6 +22,7 @@ def set_token_cookie(response, token_key):
     )
     return response
 
+
 class CookieAuthentication(TokenAuthentication):
     """Reads the DRF token from an httpOnly cookie instead of the Auth header"""
     
