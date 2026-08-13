@@ -4,23 +4,19 @@ services:
     container_name: postgres-container
     env_file:
       - ./server/.env
-    ports:
-      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
     
   backend:
     build: ./server
     container_name: django-container
-    command: sh -c "gunicorn task_api.wsgi --bind 0.0.0.0:8000 --reload"
+    command: gunicorn task_api.wsgi --bind 0.0.0.0:8000
     env_file:
       - ./server/.env
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./server:/app
     depends_on:
       - db
+    restart: unless-stopped
 
   nginx:
     build: ./client
@@ -34,6 +30,8 @@ services:
       # - ./client/dist:/usr/share/nginx/html
     depends_on:
       - backend
+    restart: unless-stopped
+
 
 volumes:
   pgdata:
