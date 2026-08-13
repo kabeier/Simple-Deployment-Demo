@@ -81,3 +81,4 @@ class LogOut(UserView):
         user.auth_token.delete()
         response = Response({"detail":"logged out"})
         response.delete_cookie("token", path="/")
+        return response
