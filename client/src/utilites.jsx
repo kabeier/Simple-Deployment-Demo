@@ -2,19 +2,10 @@ import axios from "axios";
 import { redirect } from "react-router-dom";
 
 export const api = axios.create({
-    baseURL: "/api/v1/"
+    baseURL: "/api/v1/",
+    withCredentials:true
 })
 
-// Run immediately before every request this client sends
-
-api.interceptors.request.use((config)=>{
-    const token = localStorage.getItem("token");
-    if(token){
-        config.headers.Authorization = `Token ${token}`
-    }
-    return config
-
-})
 
 const errorMessage = (error)=>{
     const data = error.response?.data;
@@ -33,9 +24,8 @@ export const userAuth = async (email, password, create)=>{
                 password
             }
         );
-        const { email: userEmail, token} = response.data
-        localStorage.setItem("token", token)
-        return userEmail
+        
+        return response.data.email
 
     }catch (error){
         alert(errorMessage(error))
@@ -44,43 +34,41 @@ export const userAuth = async (email, password, create)=>{
 
 }
 
-export const userConfirmation = async () => {
-    const token = localStorage.getItem("token");
-    if(!token){return null}
-    try{
-        const response = await api.get("users/");
-        return response.data.email;
-    } catch (error){
-        localStorage.removeItem("token");
-        console.log(error)
-        return null;
-    }
-}
-
 export const userLogOut = async () =>{
     try{
         await api.post("users/logout/")
     }catch(error){
-        console.error("Logout request failed; clearing the local session anyway", error)
+        console.error("Logout request failed;", error)
     }
-    localStorage.removeItem("token")
     return null
 
 }
+export const userConfirmation = async () => {
+
+    try{
+        const response = await api.get("users/");
+        return response.data.email;
+    } catch (error){
+        return null;
+    }
+}
+
 
 //  blocks a route: bounce to login page if there is no token
-export const requireLogin =()=>{
-    if (!localStorage.getItem("token")) throw redirect("/");
+export const requireLogin = async ()=>{
+    const email = await userConfirmation()
+    if (!email) throw redirect("/");
     return null;
 }
 
 //  the reverse.... a logged in user has no business on the login page
-export const redirectIfLoggedIn =()=>{
-    return localStorage.getItem("token") ? redirect("/home") : null;
+export const redirectIfLoggedIn = async ()=>{
+    const email = await userConfirmation()
+    return email ? redirect("/home") : null;
 }
 
-export const homeLoader = ()=>{
-    requireLogin()
+export const homeLoader = async ()=>{
+    await requireLogin()
     return getTasks()
 }
 
