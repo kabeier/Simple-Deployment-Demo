@@ -1,4 +1,5 @@
 from django.contrib.auth import login, authenticate, logout
+from django.conf import settings
 from .models import AppUser
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
@@ -6,30 +7,46 @@ from rest_framework.response import Response
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status as s
-from django.conf import settings
 
-COOKIE_MAX_AGE = 60 * 60 * 24 * 7 # 7 days long
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.settings import api_settings
 
-def set_token_cookie(response, token_key):
-    response.set_cookie(
-        key = "token",
-        value=token_key,
-        httponly=True,
-        secure=settings.AUTH_COOKIE_SECURE,
-        samesite=settings.AUTH_COOKIE_SAMESITE,
-        max_age=COOKIE_MAX_AGE,
-        path="/"
-    )
+
+ACCESS_MAX_AGE = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+REFRESH_MAX_AGE = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+REFRESH_COOKIE_PATH = "/api/v1/users/"
+
+def set_auth_cookies(response, access=None, refresh=None):
+    common = {
+        "httponly":True,
+        "secure": settings.AUTH_COOKIE_SECURE,
+        "samesite":settings.AUTH_COOKIE_SAMESITE
+    }
+    if access:
+        response.set_cookie("access", access, max_age=ACCESS_MAX_AGE, path="/", **common)
+    if refresh:
+        response.set_cookie("refresh", access, max_age=REFRESH_MAX_AGE, path=REFRESH_COOKIE_PATH, **common)
     return response
 
-class CookieAuthentication(TokenAuthentication):
-    """Reads the DRF token from an httpOnly cookie instead of the Auth header"""
-    
+def clear_auth_cookies(response):
+    response.delete_cookie("access", path="/")
+    response.delete_cookie("refresh", path=REFRESH_COOKIE_PATH)
+    return response
+
+def tokens_for(user):
+    refresh = RefreshToken.for_user(user)
+    return str(refresh.access_token), str(refresh)
+
+class JWTCookieAuthentication(JWTAuthentication):
     def authenticate(self, request):
-        token_key = request.COOKIES.get("token")
-        if not token_key:
+        raw_token = request.COOKIES.get("access")
+        if raw_token is None:
             return None
-        return self.authenticate_credentials(token_key)
+        validated_token = self.get_validated_token(raw_token)
+        return self.get_user(validated_token), validated_token
+
         
 
 # Create your views here.
@@ -44,9 +61,9 @@ class CreateUser(APIView):
             new_user = AppUser.objects.create_user(**data)
             new_user.full_clean()
             new_user.save()
-            token = Token.objects.create(user=new_user)
+            access, refresh = tokens_for(new_user)
             response = Response({"email":new_user.email}, status=s.HTTP_201_CREATED)
-            return set_token_cookie(response, token.key)
+            return set_auth_cookies(response, access, refresh)
         except Exception as e:
             return Response(e.args, status=s.HTTP_400_BAD_REQUEST)
 
@@ -59,14 +76,58 @@ class LogIn(APIView):
         data['username'] = request.data.get('email')
         user = authenticate(username=data.get('username'), password=data.get("password"))
         if user:
-            token, _ = Token.objects.get_or_create(user=user)
+            access, refresh = tokens_for(user)
             response = Response({ "email":user.email})
-            return set_token_cookie(response, token.key)
+            return set_auth_cookies(response, access, refresh)
         else:
             return Response("No user matching credentials", status=s.HTTP_404_NOT_FOUND)
 
+class RefreshView(APIView):
+    authentication_classes = []
+    permission_classes = []
+    def post(self, request):
+        raw_refresh= request.COOKIES.get("refresh")
+        if not raw_refresh:
+            return Response({"detail":"No refresh Token"}, status=s.HTTP_401_UNAUTHORIZED)
+        try:
+            refresh = RefreshToken(raw_refresh)
+        except TokenError:
+            return clear_auth_cookies(
+                Response({"detail":"Invalid or expired refresh Token"},
+                         status=s.HTTP_401_UNAUTHORIZED)
+                )
+        access = str(refresh.access_token)
+        
+        new_refresh = None
+        # Check SimpleJWT's settings to see whether refresh-token
+        # rotation has been enabled.
+        #
+        # Rotation means every time a refresh token is used,
+        # we replace it with a newly generated refresh token.
+        if api_settings.ROTATE_REFRESH_TOKENS:
+            # If refresh-token blacklisting is also enabled,
+            # invalidate the old refresh token after it has been used.
+            if api_settings.BLACKLIST_AFTER_ROTATION:
+                try:
+                    refresh.blacklist()
+                except AttributeError:
+                    pass
+            # Give the refresh token a new unique JWT ID ("jti").
+            #
+            # This helps distinguish the new rotated token from
+            # the old refresh token.    
+            refresh.set_jti()
+            #new expiration time
+            refresh.set_exp()
+            # set a new issued at timestamp
+            refresh.set_iat()
+            new_refresh = str(refresh)
+        response = Response({"refreshed":True})
+        return set_auth_cookies(response, access, new_refresh)
+
+
 class UserView(APIView):
-    authentication_classes = [CookieAuthentication]
+    authentication_classes = [JWTCookieAuthentication]
     permission_classes = [IsAuthenticated]
 
 
@@ -77,8 +138,11 @@ class Info(UserView):
 
 class LogOut(UserView):
     def post(self, request):
-        user = request.user
-        user.auth_token.delete()
-        response = Response({"detail":"logged out"})
-        response.delete_cookie("token", path="/")
-        return response
+        raw_refresh = request.COOKIES.get("refresh")
+        if raw_refresh:
+            try:
+                RefreshToken(raw_refresh).blacklist()
+            except TokenError:
+                pass
+        return clear_auth_cookies(Response({"detail":"logged out"}))
+       
