@@ -7,7 +7,7 @@ export const api = axios.create({
 })
 
 const refreshAccessToken=()=>{
-    return axios.post("/api/v1/users/refresh",{},{withCredentials:true})
+    return axios.post("/api/v1/users/refresh/",{},{withCredentials:true})
 }
 
 api.interceptors.response.use(
