@@ -1,10 +1,10 @@
 from django.contrib.auth import login, authenticate, logout
 from django.conf import settings
 from .models import AppUser
-from rest_framework.authtoken.models import Token
+# from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.authentication import TokenAuthentication
+# from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status as s
 
@@ -27,7 +27,8 @@ def set_auth_cookies(response, access=None, refresh=None):
     if access:
         response.set_cookie("access", access, max_age=ACCESS_MAX_AGE, path="/", **common)
     if refresh:
-        response.set_cookie("refresh", access, max_age=REFRESH_MAX_AGE, path=REFRESH_COOKIE_PATH, **common)
+                                #  Wrote access not refersh here
+        response.set_cookie("refresh", refresh, max_age=REFRESH_MAX_AGE, path=REFRESH_COOKIE_PATH, **common)
     return response
 
 def clear_auth_cookies(response):
