@@ -1,10 +1,8 @@
 from django.contrib.auth import login, authenticate, logout
 from django.conf import settings
 from .models import AppUser
-# from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
 from rest_framework.response import Response
-# from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status as s
 

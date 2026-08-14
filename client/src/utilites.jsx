@@ -6,6 +6,32 @@ export const api = axios.create({
     withCredentials:true
 })
 
+const refreshAccessToken=()=>{
+    return axios.post("/api/v1/users/refresh",{},{withCredentials:true})
+}
+
+api.interceptors.response.use(
+    // On success do nothing
+    (response)=>response,
+    // on failed/error (401) what to do
+    async (error)=>{
+        const originalRequest = error.config;
+
+        const isRefreshCall = originalRequest?.url?.includes("users/refresh")
+
+        if (error.response?.status === 401 && !originalRequest._retry && !isRefreshCall){
+            originalRequest._retry = true
+            try {
+                await refreshAccessToken();
+                return api(originalRequest)
+            }catch(refreshError){
+                return Promise.reject(refreshError)
+            }
+        }
+        return Promise.reject(error)
+    }
+)
+
 
 const errorMessage = (error)=>{
     const data = error.response?.data;
